@@ -26,8 +26,16 @@ If slowing down module X reduces throughput, that code is on the critical path. 
 
 ## Installation
 
+**From source:**
 ```bash
-pip install speed-bump
+git clone https://github.com/SonicField/speed-bump.git
+cd speed-bump
+pip install .
+```
+
+**From wheel (if available):**
+```bash
+pip install speed_bump-0.1.0-cp312-cp312-linux_aarch64.whl
 ```
 
 **Requirements:**
@@ -111,7 +119,7 @@ speed_bump.spin_delay_ns(1000)  # Spin for 1µs
 ## Development
 
 ```bash
-git clone https://github.com/alexturner/speed-bump.git
+git clone https://github.com/SonicField/speed-bump.git
 cd speed-bump
 pip install -e .[dev]
 pytest
@@ -125,10 +133,11 @@ MIT. See [LICENSE](LICENSE).
 
 ## Status
 
-This project is under active development. Current implementation includes:
+v0.1.0 - Initial release. Core functionality complete:
 - [x] Clock calibration
-- [x] Spin delay
-- [x] Target pattern parsing
-- [ ] PEP 669 monitoring integration
-- [ ] Timing window control
+- [x] Spin delay (C extension)
+- [x] Target pattern parsing (glob-based)
+- [x] PEP 669 monitoring integration
+- [x] Timing window control (start delay, duration)
+- [x] Frequency control (every Nth call)
 - [ ] Statistics collection
