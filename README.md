@@ -8,21 +8,11 @@ This is particularly useful for AI/ML workloads where traditional profiling miss
 
 ## The Problem
 
-In complex AI systems (like vLLM, TensorRT-LLM, or custom inference pipelines), it's hard to know which Python code actually impacts throughput:
+Traditional profilers show where Python spends time, but in GPU-accelerated systems this is misleading. If Python is busy while the GPU is also busy, speeding up Python won't help. Conversely, micro-stalls where the GPU waits for Python won't show up as "hot" in a profiler.
 
-- Traditional profilers show where time is spent, not what matters
-- GPU-bound workloads hide Python overhead in async operations
-- Optimising the wrong code wastes engineering effort
+The fundamental issue: **time spent ≠ time that matters**.
 
-## The Solution
-
-Speed Bump uses a different approach: **selective slowdown**.
-
-1. Configure which Python modules/functions to slow down
-2. Run your benchmark
-3. Measure the throughput impact
-
-If slowing down module X reduces throughput, that code is on the critical path. If throughput is unchanged, you can deprioritise optimising that code.
+Speed Bump inverts the problem: instead of measuring how fast code runs, measure how much throughput drops when code is artificially slowed. If slowing module X doesn't affect throughput, don't bother optimising it.
 
 ## Installation
 
@@ -102,6 +92,11 @@ Key design decisions:
 - **Spin delay, not sleep**: Delays hold the CPU (and GIL) to accurately simulate slower Python code
 - **Clock calibration**: Measures `clock_gettime` overhead at startup to ensure accurate delays
 - **Minimal overhead**: PEP 669 allows per-code-object monitoring, so non-matching functions have zero overhead
+
+## Documentation
+
+- **[Methodology Guide](docs/methodology.md)**: The systematic approach to finding Python bottlenecks
+- **[Pattern Reference](docs/patterns.md)**: How to write target patterns for different frameworks
 
 ## API
 
