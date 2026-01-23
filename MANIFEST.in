@@ -1,0 +1,13 @@
+include LICENSE
+include README.md
+include CONTRIBUTING.md
+include CODE_OF_CONDUCT.md
+include pyproject.toml
+include setup.py
+
+recursive-include src *.py *.c *.h
+recursive-include tests *.py
+
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude *.so
