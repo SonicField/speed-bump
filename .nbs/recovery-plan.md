@@ -12,13 +12,13 @@
 - **What**: Create `01-02-2026-speed-bump-plan.md` with terminal goal and prioritised work
 - **Why**: NBS compliance requires explicit plan file
 - **Reversible**: Delete file
-- **Status**: Pending
+- **Status**: Complete
 
 ### Step 2: Create progress log
 - **What**: Create `01-02-2026-speed-bump-progress.md` documenting this recovery session
 - **Why**: NBS compliance requires progress tracking
 - **Reversible**: Delete file
-- **Status**: Pending
+- **Status**: Complete
 
 ### Step 3: Document limitations in README
 - **What**: Add "Limitations" section to README.md covering:
@@ -27,32 +27,32 @@
   - GIL implications (spin delay holds GIL)
 - **Why**: Discovery identified these as undocumented known limitations
 - **Reversible**: Revert git change
-- **Status**: Pending
+- **Status**: Complete
 
 ### Step 4: Annotate Statistics collection uncertainty
 - **What**: Keep the TODO, add comments explaining we don't know what this means, suggest /nbs-investigation
 - **Why**: Honest about uncertainty; defers decision to investigation rather than guessing
 - **Reversible**: Revert git change
-- **Status**: Pending
+- **Status**: Complete
 - **Decision**: Human chose to keep with uncertainty annotation
 
 ### Step 5: Add manual build instructions
 - **What**: Add section to README for building without pip (direct gcc)
 - **Why**: Worker-001 had to figure this out; should be documented
 - **Reversible**: Revert git change
-- **Status**: Pending
+- **Status**: Complete
 
 ### Step 6: Commit recovery changes
 - **What**: Git commit all changes with clear message
 - **Why**: Preserve recovery state in version control
 - **Reversible**: Git revert
-- **Status**: Pending
+- **Status**: Complete (commit 133b703)
 
 ### Step 7: Verify final state
 - **What**: Confirm all artefacts preserved, tests still pass, structure complete
 - **Why**: Final check before declaring recovery complete
 - **Reversible**: N/A (read-only)
-- **Status**: Pending
+- **Status**: Complete
 
 ---
 
