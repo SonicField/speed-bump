@@ -28,6 +28,22 @@ pip install .
 pip install speed_bump-0.1.0-cp312-cp312-linux_aarch64.whl
 ```
 
+**Manual build (without pip/setuptools):**
+
+If pip or setuptools are unavailable, build the C extension directly:
+```bash
+cd speed-bump
+PYTHON_INCLUDES=$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("INCLUDEPY"))')
+EXT_SUFFIX=$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("EXT_SUFFIX"))')
+
+gcc -shared -fPIC -I"$PYTHON_INCLUDES" -O3 -Wall -std=c11 -D_GNU_SOURCE \
+    src/speed_bump/_core.c -o src/speed_bump/_core$EXT_SUFFIX
+
+# Then add src/ to PYTHONPATH
+export PYTHONPATH=$PWD/src:$PYTHONPATH
+python3 -c "import speed_bump; print(speed_bump.clock_overhead_ns)"
+```
+
 **Requirements:**
 - Linux (x86_64 or aarch64)
 - Python 3.12+
@@ -93,6 +109,28 @@ Key design decisions:
 - **Clock calibration**: Measures `clock_gettime` overhead at startup to ensure accurate delays
 - **Minimal overhead**: PEP 669 allows per-code-object monitoring, so non-matching functions have zero overhead
 
+## Limitations
+
+Speed Bump has fundamental constraints to be aware of:
+
+### Only Interpreted Python
+
+Speed Bump can only slow down Python code that runs through the interpreter. C extensions, NumPy ufuncs, and other native code execute outside Python's monitoring system and cannot be intercepted.
+
+**Implication**: If your bottleneck is inside a C extension (e.g., inside `numpy.dot`), Speed Bump cannot slow it down to measure sensitivity.
+
+### GIL Holding
+
+The spin delay holds the GIL while waiting. This accurately simulates slower Python code (which would also hold the GIL), but means:
+- Other Python threads are blocked during the delay
+- In multi-threaded applications, interpret results carefully
+
+### Free-Threaded Python (PEP 703)
+
+Behaviour with free-threaded Python (nogil builds) is **unknown and untested**. The spin delay implementation assumes GIL semantics. If you're using Python 3.13+ with `--disable-gil`, results may not be meaningful.
+
+*This is an open question requiring investigation.*
+
 ## Documentation
 
 - **[Methodology Guide](docs/methodology.md)**: The systematic approach to finding Python bottlenecks
@@ -136,3 +174,10 @@ v0.1.0 - Initial release. Core functionality complete:
 - [x] Timing window control (start delay, duration)
 - [x] Frequency control (every Nth call)
 - [ ] Statistics collection
+
+<!--
+NBS NOTE (2026-02-01): We don't know what "Statistics collection" should actually collect.
+This TODO predates epistemic discipline. Before implementing, run an /nbs-investigation
+to determine: What metrics matter? Per-function call counts? Delay distribution?
+Integration with external tools? Don't implement without clear requirements.
+-->
