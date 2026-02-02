@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from speed_bump._config import Config, ConfigError, _PROCESS_START_NS, load_config
+from speed_bump._config import _PROCESS_START_NS, Config, ConfigError, load_config
 
 if TYPE_CHECKING:
     pass

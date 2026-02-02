@@ -116,9 +116,7 @@ def load_targets(path: str | os.PathLike[str]) -> list[TargetPattern]:
     return patterns
 
 
-def matches_any(
-    patterns: list[TargetPattern], module_name: str, qualified_name: str
-) -> bool:
+def matches_any(patterns: list[TargetPattern], module_name: str, qualified_name: str) -> bool:
     """Check if any pattern matches the given code object.
 
     Args:

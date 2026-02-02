@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 import speed_bump
-from speed_bump import Config, install, is_installed, uninstall, clear_cache
+from speed_bump import Config, clear_cache, install, is_installed, uninstall
 
 if TYPE_CHECKING:
     pass
@@ -251,7 +251,7 @@ class TestTimingWindow:
             frequency=1,
             start_ns=now - 2_000_000_000,  # 2s ago
             end_ns=now - 1_000_000_000,  # 1s ago (ended)
-            )
+        )
         install(config)
 
         def window_end_test() -> int:

@@ -197,10 +197,13 @@ def _warn(message: str) -> None:
 
 def _report_config(config: Config, targets_path: str) -> None:
     """Print configuration summary to stderr."""
-    print(f"speed_bump: targets loaded: {len(config.targets)} patterns from {targets_path}",
-          file=sys.stderr)
-    print(f"speed_bump: delay: {config.delay_ns} ns, frequency: {config.frequency}",
-          file=sys.stderr)
+    print(
+        f"speed_bump: targets loaded: {len(config.targets)} patterns from {targets_path}",
+        file=sys.stderr,
+    )
+    print(
+        f"speed_bump: delay: {config.delay_ns} ns, frequency: {config.frequency}", file=sys.stderr
+    )
 
     if config.start_ns > _PROCESS_START_NS:
         start_offset_ms = (config.start_ns - _PROCESS_START_NS) // 1_000_000

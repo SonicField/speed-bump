@@ -39,24 +39,24 @@ from speed_bump._monitoring import (
 
 __version__ = "0.1.0"
 __all__ = [
-    # Calibration
-    "clock_overhead_ns",
-    "min_delay_ns",
-    "get_clock_overhead_ns",
-    "get_min_delay_ns",
-    "is_calibrated",
-    # Delay
-    "spin_delay_ns",
     # Config
     "Config",
     "ConfigError",
-    "load_config",
+    "clear_cache",
+    # Calibration
+    "clock_overhead_ns",
+    "get_clock_overhead_ns",
+    "get_config",
+    "get_min_delay_ns",
     # Monitoring
     "install",
-    "uninstall",
+    "is_calibrated",
     "is_installed",
-    "get_config",
-    "clear_cache",
+    "load_config",
+    "min_delay_ns",
+    # Delay
+    "spin_delay_ns",
+    "uninstall",
 ]
 
 # Expose calibrated values as module attributes for convenience
