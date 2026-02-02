@@ -127,20 +127,22 @@ Supervisor retains:
 
 ## Progress Tracking
 
-| Phase | Status | Worker | Notes |
-|-------|--------|--------|-------|
-| 1. Build GIL | Pending | | |
-| 1. Build FTP | Pending | | |
-| 2. Baseline GIL | Done | worker-001 | 28/28 pass |
-| 2. Baseline FTP | Pending | | |
-| 3. Test design | Pending | | Supervisor task |
-| 4. Implementation | Pending | | |
-| 5. Documentation | Pending | | |
+| Phase | Status | Notes |
+|-------|--------|-------|
+| 1. Build GIL | Complete | `~/local/cpython/python-3.14-gil` |
+| 1. Build FTP | Complete | `~/local/cpython/python-3.14-ftp` |
+| 2. Baseline GIL | Complete | 28/28 pass |
+| 2. Baseline FTP | Complete | All applicable tests pass |
+| 3. Test design | Complete | `docs/falsification-test-design.md` |
+| 4. Implementation | Complete | `test_free_threaded.py`, `test_threading_scaling.py` |
+| 5. Documentation | Complete | README, testing.md updated |
+
+**Plan complete. All objectives achieved. See progress log for details.**
 
 ---
 
-## Open Questions
+## Open Questions (Resolved)
 
-1. Does Python 3.14 source we have support `--disable-gil`?
-2. What's the actual behaviour of spin delay without GIL?
-3. Are there race conditions in the match cache under FTP?
+1. ~~Does Python 3.14 source we have support `--disable-gil`?~~ **Yes** - builds successfully
+2. ~~What's the actual behaviour of spin delay without GIL?~~ **Parallel execution** - each thread gets independent delay
+3. ~~Are there race conditions in the match cache under FTP?~~ **No** - ThreadSanitizer verification passed

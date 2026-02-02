@@ -213,3 +213,49 @@ All C tests passed
 
 **Learning**: Writing a test file is not the same as completing the verification cycle. The cycle requires: Test → Code → **Document**. Skipping documentation means the test is discoverable only by archaeology.
 
+### 2026-02-02 - Timing robustness and CI preparation
+
+**Problem**: 50μs timing tests are vulnerable to GC interference - Python GC can run between timing calls, adding milliseconds to measurements.
+
+**Fix**: Two mechanisms:
+1. **GC disable**: `gc.disable()` during timing-sensitive measurements
+2. **Auto-deflake**: If test fails with excessive overshoot, retry twice - both must pass to recover from flake. This handles transient interference without masking real bugs.
+
+Applied to:
+- `tests/test_free_threaded.py`
+- `tests/test_threading_scaling.py`
+- `tests/run_ftp_tests.sh`
+
+### 2026-02-02 - Python 3.12 compatibility
+
+**Problem**: FTP tests call `sys._is_gil_enabled()` which doesn't exist on Python 3.12. CI tests on 3.12.
+
+**Fix**: Added `@requires_gil_detection` skip decorator for tests needing the detection API.
+
+### 2026-02-02 - ruff setup and formatting
+
+- Created `~/local/cpython/venv-tools` with ruff 0.14.14
+- Fixed 24 lint errors across codebase
+- All `ruff check` and `ruff format --check` now pass
+
+### 2026-02-02 - File organisation
+
+- Moved plan/progress files to `planning/`
+- Moved `run_ftp_tests.sh` to `tests/`
+- Added `.claude/` and `.nbs/` to `.gitignore`
+
+### 2026-02-02 - pytest verification
+
+Verified full pytest suite works:
+- `pip install -e .[test]` builds C extension and installs pytest
+- 102 tests collected
+- 96 passed, 6 skipped (FTP tests on GIL Python)
+
+README updated to reference `docs/testing.md` for C-level sanitiser tests.
+
+### 2026-02-02 - Push to GitHub
+
+13 commits pushed to origin/main (76cd4d2..66b2556).
+
+**FTP verification complete. Plan objectives achieved.**
+
