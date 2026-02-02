@@ -22,12 +22,19 @@ import speed_bump
 from speed_bump._patterns import parse_pattern
 
 # Import detection utilities from conftest
-from conftest import is_free_threaded, is_gil_python, requires_ftp, requires_gil
+from conftest import (
+    is_free_threaded,
+    is_gil_python,
+    requires_ftp,
+    requires_gil,
+    requires_gil_detection,
+)
 
 
 class TestRuntimeDetection:
     """Tests for FTP/GIL detection."""
 
+    @requires_gil_detection
     def test_detection_api_exists(self):
         """Claim: sys._is_gil_enabled exists on Python 3.13+.
         Falsification: Would fail on Python 3.12 or earlier.
@@ -47,6 +54,7 @@ class TestRuntimeDetection:
         )
 
     @requires_gil
+    @requires_gil_detection
     def test_gil_detected_correctly(self):
         """Claim: On GIL Python, sys._is_gil_enabled() returns True.
         Falsification: Would fail if detection was inverted or broken.
