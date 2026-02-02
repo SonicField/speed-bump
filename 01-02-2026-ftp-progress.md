@@ -194,3 +194,22 @@ This excludes thread lifecycle overhead from measurement.
 
 **Falsification**: Deliberately racy code produced tsan warnings, confirming the tool works. The clean result for `spin_delay_ns` is meaningful.
 
+### 2026-02-02 - Proper test integration
+
+**Problem identified**: The tsan test existed as a file but wasn't integrated:
+- Not part of any build system
+- No documentation
+- No instructions for running
+
+**Fix**: Created proper test infrastructure:
+- `tests/run_c_tests.sh`: Runner script for tsan/asan tests
+- `docs/testing.md`: Complete testing documentation
+
+**Verification**: Both tsan and asan tests pass:
+```
+=== Summary ===
+All C tests passed
+```
+
+**Learning**: Writing a test file is not the same as completing the verification cycle. The cycle requires: Test → Code → **Document**. Skipping documentation means the test is discoverable only by archaeology.
+
