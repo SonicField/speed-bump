@@ -26,6 +26,16 @@
 
 /* ============================================================================
  * Module State
+ *
+ * Thread-safety notes:
+ * - g_clock_overhead_ns and g_calibrated are written once during module init
+ * - Python's import machinery serialises module init (even on FTP)
+ * - After init, these are read-only and safe to access from any thread
+ * - spin_delay_ns() uses only local variables and is fully thread-safe
+ *
+ * Verified with ThreadSanitizer: spin_delay_ns shows no races when called
+ * from 8 concurrent threads. calibrate_clock would race if called
+ * concurrently, but this never happens due to import serialisation.
  * ============================================================================ */
 
 static uint64_t g_clock_overhead_ns = 0;

@@ -143,3 +143,54 @@ Updated _core.c:
 
 **Status**: FTP verification complete. Speed-bump works correctly on both GIL and FTP Python. The parallel performance on FTP shows high contention, which is actually beneficial for the slowdown purpose but means parallelism tests don't pass. This is documented as expected behaviour.
 
+### 2026-02-01 - Correction: Test methodology error, not contention
+
+**User challenge**: "does not look good - did you fix it?"
+
+**Investigation triggered**: Rather than accepting "contention" as explanation, investigated the actual measurements.
+
+**Findings**:
+1. Per-thread delay accuracy was excellent (~50μs for 50μs request)
+2. Wall-clock time included thread start/join overhead (500-1200μs)
+3. The original tests measured `thread.start()` → `thread.join()`, not the spin delay
+
+**Root cause**: Measurement methodology error, not cache contention.
+
+**Fix**: Two-barrier synchronisation to isolate spin delay measurement:
+1. `start_barrier`: all threads ready, main thread releases and starts timing
+2. `end_barrier`: all threads done, main thread stops timing
+
+This excludes thread lifecycle overhead from measurement.
+
+**Corrected results**:
+| Build | Passed | Failed | Skipped |
+|-------|--------|--------|---------|
+| GIL Python 3.14 | 13 | 0 | 4 |
+| FTP Python 3.14 | 13 | 0 | 4 |
+
+**Lesson**: The initial "contention hypothesis" was plausible but unfalsified. When challenged, proper investigation revealed the actual cause. Accepting test failures as "expected behaviour" without deeper investigation was a near-miss on confirmation bias.
+
+**Updated files**:
+- `tests/test_threading_scaling.py` - two-barrier approach
+- `run_ftp_tests.sh` - matching fixes to inline tests
+- `README.md` - removed incorrect contention claim
+
+**Status (corrected)**: FTP verification complete. All applicable tests pass on both builds. Parallel execution on FTP correctly completes in constant time.
+
+### 2026-02-01 - ThreadSanitizer verification
+
+**Purpose**: Verify C extension is race-free under concurrent use.
+
+**Method**:
+1. Created `tests/tsan_test.c` - standalone C test with 8 threads, 100 iterations each
+2. Compiled with `clang -fsanitize=thread`
+3. Verified tsan detects races by testing deliberate racy code first
+
+**Results**:
+- `spin_delay_ns`: **Race-free** - no tsan warnings with 8 concurrent threads
+- `calibrate_clock`: Would race if called concurrently, but this never happens (Python import serialises module init)
+
+**Documentation**: Added thread-safety notes to `_core.c` explaining the guarantees and their basis.
+
+**Falsification**: Deliberately racy code produced tsan warnings, confirming the tool works. The clean result for `spin_delay_ns` is meaningful.
+
