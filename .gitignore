@@ -76,3 +76,7 @@ Thumbs.db
 
 # Project-specific
 wheelhouse/
+
+# Local working directories
+.claude/
+.nbs/
