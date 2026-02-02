@@ -6,6 +6,7 @@ including environment variable handling and timing windows.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import textwrap
@@ -14,6 +15,17 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     pass
+
+# Get PYTHONPATH for subprocess tests (needed when speed_bump isn't installed)
+_SRC_PATH = str(Path(__file__).parent.parent / "src")
+_BASE_ENV = {"PYTHONPATH": _SRC_PATH}
+
+
+def _make_env(**extra: str) -> dict[str, str]:
+    """Create environment dict with PYTHONPATH and any extra vars."""
+    env = dict(_BASE_ENV)
+    env.update(extra)
+    return env
 
 
 class TestSubprocessIntegration:
@@ -41,7 +53,7 @@ class TestSubprocessIntegration:
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
-            env={},  # Empty env means no SPEED_BUMP_TARGETS
+            env=_make_env(),  # Empty means no SPEED_BUMP_TARGETS but includes PYTHONPATH
         )
         assert result.returncode == 0, f"Failed: {result.stderr}"
 
@@ -76,11 +88,11 @@ class TestSubprocessIntegration:
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
-            env={
-                "SPEED_BUMP_TARGETS": str(targets_file),
-                "SPEED_BUMP_DELAY_NS": "100000",  # 100 microseconds
-                "SPEED_BUMP_FREQUENCY": "1",
-            },
+            env=_make_env(
+                SPEED_BUMP_TARGETS=str(targets_file),
+                SPEED_BUMP_DELAY_NS="100000",  # 100 microseconds
+                SPEED_BUMP_FREQUENCY="1",
+            ),
         )
         assert result.returncode == 0, f"Failed: {result.stderr}\n{result.stdout}"
 
@@ -114,11 +126,11 @@ class TestSubprocessIntegration:
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
-            env={
-                "SPEED_BUMP_TARGETS": str(targets_file),
-                "SPEED_BUMP_DELAY_NS": "100000",
-                "SPEED_BUMP_FREQUENCY": "10",
-            },
+            env=_make_env(
+                SPEED_BUMP_TARGETS=str(targets_file),
+                SPEED_BUMP_DELAY_NS="100000",
+                SPEED_BUMP_FREQUENCY="10",
+            ),
         )
         assert result.returncode == 0, f"Failed: {result.stderr}\n{result.stdout}"
 
@@ -152,11 +164,11 @@ class TestSubprocessIntegration:
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
-            env={
-                "SPEED_BUMP_TARGETS": str(targets_file),
-                "SPEED_BUMP_DELAY_NS": "100000",
-                "SPEED_BUMP_START_MS": "10000",  # 10 seconds in future
-            },
+            env=_make_env(
+                SPEED_BUMP_TARGETS=str(targets_file),
+                SPEED_BUMP_DELAY_NS="100000",
+                SPEED_BUMP_START_MS="10000",  # 10 seconds in future
+            ),
         )
         assert result.returncode == 0, f"Failed: {result.stderr}\n{result.stdout}"
 
@@ -193,11 +205,11 @@ class TestSubprocessIntegration:
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
-            env={
-                "SPEED_BUMP_TARGETS": str(targets_file),
-                "SPEED_BUMP_DELAY_NS": "100000",
-                "SPEED_BUMP_DURATION_MS": "1",  # 1ms duration
-            },
+            env=_make_env(
+                SPEED_BUMP_TARGETS=str(targets_file),
+                SPEED_BUMP_DELAY_NS="100000",
+                SPEED_BUMP_DURATION_MS="1",  # 1ms duration
+            ),
         )
         assert result.returncode == 0, f"Failed: {result.stderr}\n{result.stdout}"
 
@@ -230,10 +242,10 @@ class TestSubprocessIntegration:
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
-            env={
-                "SPEED_BUMP_TARGETS": str(targets_file),
-                "SPEED_BUMP_DELAY_NS": "1000000",  # 1ms per call would be obvious
-            },
+            env=_make_env(
+                SPEED_BUMP_TARGETS=str(targets_file),
+                SPEED_BUMP_DELAY_NS="1000000",  # 1ms per call would be obvious
+            ),
         )
         assert result.returncode == 0, f"Failed: {result.stderr}\n{result.stdout}"
 
@@ -258,9 +270,9 @@ class TestErrorHandling:
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
-            env={
-                "SPEED_BUMP_TARGETS": str(tmp_path / "nonexistent.txt"),
-            },
+            env=_make_env(
+                SPEED_BUMP_TARGETS=str(tmp_path / "nonexistent.txt"),
+            ),
         )
         assert result.returncode == 0, f"Failed: {result.stderr}"
         assert "file not found" in result.stdout.lower()
@@ -285,10 +297,10 @@ class TestErrorHandling:
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
-            env={
-                "SPEED_BUMP_TARGETS": str(targets_file),
-                "SPEED_BUMP_DELAY_NS": "not_a_number",
-            },
+            env=_make_env(
+                SPEED_BUMP_TARGETS=str(targets_file),
+                SPEED_BUMP_DELAY_NS="not_a_number",
+            ),
         )
         assert result.returncode == 0, f"Failed: {result.stderr}"
         assert "invalid" in result.stdout.lower()
@@ -314,6 +326,7 @@ class TestCalibrationInSubprocess:
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
+            env=_make_env(),
         )
         assert result.returncode == 0, f"Failed: {result.stderr}"
         assert "clock_overhead_ns:" in result.stdout
@@ -335,10 +348,10 @@ class TestCalibrationInSubprocess:
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
-            env={
-                "SPEED_BUMP_TARGETS": str(targets_file),
-                "SPEED_BUMP_DELAY_NS": "1",  # Way below minimum
-            },
+            env=_make_env(
+                SPEED_BUMP_TARGETS=str(targets_file),
+                SPEED_BUMP_DELAY_NS="1",  # Way below minimum
+            ),
         )
         assert result.returncode == 0, f"Failed: {result.stderr}"
         # Should have warning in stderr

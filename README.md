@@ -36,8 +36,13 @@ cd speed-bump
 PYTHON_INCLUDES=$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("INCLUDEPY"))')
 EXT_SUFFIX=$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("EXT_SUFFIX"))')
 
+# Core extension (required for all Python versions)
 gcc -shared -fPIC -I"$PYTHON_INCLUDES" -O3 -Wall -std=c11 -D_GNU_SOURCE \
     src/speed_bump/_core.c -o src/speed_bump/_core$EXT_SUFFIX
+
+# Setprofile extension (required for Python 3.10-3.11)
+gcc -shared -fPIC -I"$PYTHON_INCLUDES" -O3 -Wall -std=c11 -D_GNU_SOURCE \
+    src/speed_bump/_setprofile.c -o src/speed_bump/_setprofile$EXT_SUFFIX
 
 # Then add src/ to PYTHONPATH
 export PYTHONPATH=$PWD/src:$PYTHONPATH
@@ -46,7 +51,22 @@ python3 -c "import speed_bump; print(speed_bump.clock_overhead_ns)"
 
 **Requirements:**
 - Linux (x86_64 or aarch64)
-- Python 3.12+
+- Python 3.10+
+
+## Python Version Support
+
+Speed Bump supports Python 3.10 and later with different backends:
+
+| Python Version | Backend | Notes |
+|----------------|---------|-------|
+| 3.12+ | PEP 669 (`sys.monitoring`) | Full feature support |
+| 3.10-3.11 | `sys.setprofile` (C extension) | `clear_cache()` is a no-op |
+
+**Python 3.10-3.11 Limitations:**
+- The match cache is stored in code objects' `co_extra` field and cannot be cleared
+- `clear_cache()` has no effect - cache persists for the lifetime of the process
+- Qualified name construction is approximate (uses first argument type for methods)
+- Use a fresh Python process if you need to change target patterns
 
 ## Quick Start
 
@@ -102,12 +122,17 @@ transformers.*:*Attention*
 
 ## How It Works
 
-Speed Bump uses Python 3.12's PEP 669 (`sys.monitoring`) to register low-overhead callbacks on function calls. When a matching function is called during the active time window, Speed Bump executes a spin-delay loop to introduce the configured latency.
+Speed Bump uses Python's monitoring capabilities to register low-overhead callbacks on function calls:
+
+- **Python 3.12+**: Uses PEP 669 (`sys.monitoring`) for per-code-object monitoring with zero overhead for non-matching functions
+- **Python 3.10-3.11**: Uses `sys.setprofile` via a C extension, with match results cached in code objects
+
+When a matching function is called during the active time window, Speed Bump executes a spin-delay loop to introduce the configured latency.
 
 Key design decisions:
 - **Spin delay, not sleep**: Delays hold the CPU (and GIL) to accurately simulate slower Python code
 - **Clock calibration**: Measures `clock_gettime` overhead at startup to ensure accurate delays
-- **Minimal overhead**: PEP 669 allows per-code-object monitoring, so non-matching functions have zero overhead
+- **Per-code caching**: Match results are cached per code object to minimise overhead
 
 ## Limitations
 

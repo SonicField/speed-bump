@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,6 +14,12 @@ from speed_bump import Config, clear_cache, install, is_installed, uninstall
 
 if TYPE_CHECKING:
     pass
+
+# Skip marker for tests requiring PEP 669 (Python 3.12+)
+requires_pep669 = pytest.mark.skipif(
+    sys.version_info < (3, 12),
+    reason="Requires PEP 669 (Python 3.12+) - clear_cache is no-op on setprofile backend"
+)
 
 
 @pytest.fixture(autouse=True)
@@ -269,6 +276,7 @@ class TestTimingWindow:
 class TestCaching:
     """Tests for match result caching."""
 
+    @requires_pep669
     def test_cache_cleared_between_configs(self, tmp_path: Path) -> None:
         """Cache is properly cleared when calling clear_cache."""
         from speed_bump._patterns import load_targets
