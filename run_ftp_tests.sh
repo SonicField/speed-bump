@@ -143,22 +143,32 @@ run_test('Delay works in worker thread', test_delay_worker_thread)
 def test_ftp_parallelism():
     delay_ns = 100_000
     n_threads = 4
-    barrier = threading.Barrier(n_threads)
+    # Two-barrier approach: excludes thread startup/teardown overhead
+    start_barrier = threading.Barrier(n_threads + 1)
+    end_barrier = threading.Barrier(n_threads + 1)
 
     def worker():
-        barrier.wait()
+        start_barrier.wait()
         speed_bump.spin_delay_ns(delay_ns)
+        end_barrier.wait()
 
     threads = [threading.Thread(target=worker) for _ in range(n_threads)]
-    start = time.perf_counter_ns()
     for t in threads:
         t.start()
-    for t in threads:
-        t.join()
+
+    # Release all workers and measure only the spin delay time
+    start_barrier.wait()
+    start = time.perf_counter_ns()
+    end_barrier.wait()
     total = time.perf_counter_ns() - start
 
-    serialised = delay_ns * n_threads
-    assert total < serialised * 0.6, f'Delays serialised: total={total}ns, serialised would be {serialised}ns'
+    for t in threads:
+        t.join()
+
+    # On FTP, total should be ~1x delay (parallel), not 4x (serialised)
+    # Allow 3x tolerance for barrier overhead
+    max_expected = delay_ns * 3
+    assert total <= max_expected, f'Delays not parallel: total={total}ns, expected < {max_expected}ns'
 run_test('FTP delays are parallel', test_ftp_parallelism,
          skip_condition=is_gil_python(), skip_reason='Requires FTP')
 
@@ -166,20 +176,28 @@ run_test('FTP delays are parallel', test_ftp_parallelism,
 def test_gil_serialisation():
     delay_ns = 100_000
     n_threads = 4
-    barrier = threading.Barrier(n_threads)
+    # Two-barrier approach for consistent measurement
+    start_barrier = threading.Barrier(n_threads + 1)
+    end_barrier = threading.Barrier(n_threads + 1)
 
     def worker():
-        barrier.wait()
+        start_barrier.wait()
         speed_bump.spin_delay_ns(delay_ns)
+        end_barrier.wait()
 
     threads = [threading.Thread(target=worker) for _ in range(n_threads)]
-    start = time.perf_counter_ns()
     for t in threads:
         t.start()
-    for t in threads:
-        t.join()
+
+    start_barrier.wait()
+    start = time.perf_counter_ns()
+    end_barrier.wait()
     total = time.perf_counter_ns() - start
 
+    for t in threads:
+        t.join()
+
+    # On GIL, delays should be serialised: total >= N * delay * 0.5
     min_expected = delay_ns * n_threads * 0.5
     assert total >= min_expected, f'Delays parallel on GIL: total={total}ns, expected >= {min_expected}ns'
 run_test('GIL delays are serialised', test_gil_serialisation,
@@ -187,22 +205,30 @@ run_test('GIL delays are serialised', test_gil_serialisation,
 
 # Test 7-10: Thread scaling (1, 2, 4, 8 threads)
 def run_parallel_delays(n_threads, delay_ns):
-    barrier = threading.Barrier(n_threads)
+    '''Two-barrier approach: measures only spin delay time.'''
+    start_barrier = threading.Barrier(n_threads + 1)
+    end_barrier = threading.Barrier(n_threads + 1)
     per_thread = [0] * n_threads
 
     def worker(idx):
-        barrier.wait()
-        start = time.perf_counter_ns()
+        start_barrier.wait()
+        t0 = time.perf_counter_ns()
         speed_bump.spin_delay_ns(delay_ns)
-        per_thread[idx] = time.perf_counter_ns() - start
+        per_thread[idx] = time.perf_counter_ns() - t0
+        end_barrier.wait()
 
     threads = [threading.Thread(target=worker, args=(i,)) for i in range(n_threads)]
-    start = time.perf_counter_ns()
     for t in threads:
         t.start()
+
+    start_barrier.wait()
+    wall_start = time.perf_counter_ns()
+    end_barrier.wait()
+    total = time.perf_counter_ns() - wall_start
+
     for t in threads:
         t.join()
-    total = time.perf_counter_ns() - start
+
     return total, per_thread
 
 for n_threads in [1, 2, 4, 8]:

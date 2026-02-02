@@ -32,26 +32,44 @@ class TestThreadScaling:
     def run_parallel_delays(
         self, n_threads: int, delay_ns: int
     ) -> tuple[int, list[int]]:
-        """Run delays in parallel, return (total_time, per_thread_times)."""
-        barrier = threading.Barrier(n_threads)
+        """Run delays in parallel, return (total_time, per_thread_times).
+
+        Uses a two-barrier approach to measure only the spin delay time,
+        excluding thread startup/teardown overhead:
+        1. start_barrier: all threads ready, main thread releases them
+        2. end_barrier: all threads done, main thread measures end time
+        """
+        # +1 for main thread participation in barriers
+        start_barrier = threading.Barrier(n_threads + 1)
+        end_barrier = threading.Barrier(n_threads + 1)
         per_thread = [0] * n_threads
 
         def worker(idx):
-            barrier.wait()  # Synchronise start
-            start = time.perf_counter_ns()
+            start_barrier.wait()  # Wait for main thread to start timing
+            t0 = time.perf_counter_ns()
             speed_bump.spin_delay_ns(delay_ns)
-            per_thread[idx] = time.perf_counter_ns() - start
+            per_thread[idx] = time.perf_counter_ns() - t0
+            end_barrier.wait()  # Signal completion to main thread
 
         threads = [
             threading.Thread(target=worker, args=(i,)) for i in range(n_threads)
         ]
 
-        start = time.perf_counter_ns()
+        # Start all threads (they'll block on start_barrier)
         for t in threads:
             t.start()
+
+        # Release all threads and start timing
+        start_barrier.wait()
+        wall_start = time.perf_counter_ns()
+
+        # Wait for all threads to complete
+        end_barrier.wait()
+        total = time.perf_counter_ns() - wall_start
+
+        # Clean up
         for t in threads:
             t.join()
-        total = time.perf_counter_ns() - start
 
         return total, per_thread
 
