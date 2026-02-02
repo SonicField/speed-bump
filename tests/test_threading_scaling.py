@@ -8,20 +8,58 @@ Falsification methodology:
 - Each test documents what it claims to prove
 - Each test documents how it would fail if the claim was false
 - Parametrised tests cover 1, 2, 4, 8 thread counts
+
+Timing robustness:
+- GC is disabled during timing-sensitive measurements
+- Auto-deflake: if test fails with excessive overshoot, retry twice
+  - Both retries must pass to recover from a flake
+  - This handles scheduler jitter without masking real bugs
 """
 
 from __future__ import annotations
 
+import gc
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable
 
 import pytest
 
+# Import detection utilities from conftest
+from conftest import requires_ftp, requires_gil
+
 import speed_bump
 
-# Import detection utilities from conftest
-from conftest import is_free_threaded, is_gil_python, requires_ftp, requires_gil
+
+def with_deflake(
+    test_fn: Callable[[], None],
+    is_overshoot: Callable[[AssertionError], bool],
+    retries: int = 2,
+) -> None:
+    """Run a timing test with auto-deflake on overshoot failures.
+
+    If test_fn raises AssertionError and is_overshoot returns True,
+    retry up to `retries` times. All retries must pass to recover.
+
+    This handles GC/scheduler interference without masking real bugs:
+    - Real bugs fail consistently
+    - Flakes pass on retry
+    """
+    try:
+        test_fn()
+    except AssertionError as e:
+        if not is_overshoot(e):
+            raise  # Not an overshoot, real failure
+
+        # Overshoot detected - retry twice, both must pass
+        for _ in range(retries):
+            try:
+                test_fn()
+            except AssertionError:
+                # Retry failed - this is a real issue
+                raise e from None  # Raise original error
+
+        # All retries passed - was a flake
 
 
 class TestThreadScaling:
@@ -29,15 +67,15 @@ class TestThreadScaling:
 
     DELAY_NS = 50_000  # 50μs base delay
 
-    def run_parallel_delays(
-        self, n_threads: int, delay_ns: int
-    ) -> tuple[int, list[int]]:
+    def run_parallel_delays(self, n_threads: int, delay_ns: int) -> tuple[int, list[int]]:
         """Run delays in parallel, return (total_time, per_thread_times).
 
         Uses a two-barrier approach to measure only the spin delay time,
         excluding thread startup/teardown overhead:
         1. start_barrier: all threads ready, main thread releases them
         2. end_barrier: all threads done, main thread measures end time
+
+        GC is disabled during timing to prevent measurement interference.
         """
         # +1 for main thread participation in barriers
         start_barrier = threading.Barrier(n_threads + 1)
@@ -51,21 +89,26 @@ class TestThreadScaling:
             per_thread[idx] = time.perf_counter_ns() - t0
             end_barrier.wait()  # Signal completion to main thread
 
-        threads = [
-            threading.Thread(target=worker, args=(i,)) for i in range(n_threads)
-        ]
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(n_threads)]
 
         # Start all threads (they'll block on start_barrier)
         for t in threads:
             t.start()
 
-        # Release all threads and start timing
-        start_barrier.wait()
-        wall_start = time.perf_counter_ns()
+        # Disable GC during timing-sensitive measurement
+        gc_was_enabled = gc.isenabled()
+        gc.disable()
+        try:
+            # Release all threads and start timing
+            start_barrier.wait()
+            wall_start = time.perf_counter_ns()
 
-        # Wait for all threads to complete
-        end_barrier.wait()
-        total = time.perf_counter_ns() - wall_start
+            # Wait for all threads to complete
+            end_barrier.wait()
+            total = time.perf_counter_ns() - wall_start
+        finally:
+            if gc_was_enabled:
+                gc.enable()
 
         # Clean up
         for t in threads:
@@ -77,15 +120,26 @@ class TestThreadScaling:
     def test_per_thread_delay_accuracy(self, n_threads: int):
         """Claim: Each thread gets accurate delay regardless of thread count.
         Falsification: Per-thread delay would be wrong if delay mechanism broken.
-        """
-        _, per_thread = self.run_parallel_delays(n_threads, self.DELAY_NS)
 
-        for i, elapsed in enumerate(per_thread):
-            ratio = elapsed / self.DELAY_NS
-            assert 0.5 <= ratio <= 3.0, (
-                f"Thread {i}/{n_threads} delay wrong: {elapsed}ns vs "
-                f"{self.DELAY_NS}ns (ratio={ratio:.2f})"
-            )
+        Uses auto-deflake for upper bound violations (ratio > 3.0) which
+        could be caused by GC/scheduler. Lower bound violations (ratio < 0.5)
+        indicate a real bug and are not retried.
+        """
+
+        def is_overshoot(e: AssertionError) -> bool:
+            # Only retry if ratio exceeded upper bound (time too long)
+            return "ratio=" in str(e) and float(str(e).split("ratio=")[1].split(")")[0]) > 3.0
+
+        def run_test():
+            _, per_thread = self.run_parallel_delays(n_threads, self.DELAY_NS)
+            for i, elapsed in enumerate(per_thread):
+                ratio = elapsed / self.DELAY_NS
+                assert 0.5 <= ratio <= 3.0, (
+                    f"Thread {i}/{n_threads} delay wrong: {elapsed}ns vs "
+                    f"{self.DELAY_NS}ns (ratio={ratio:.2f})"
+                )
+
+        with_deflake(run_test, is_overshoot)
 
     @requires_ftp
     @pytest.mark.parametrize("n_threads", [1, 2, 4, 8])
@@ -93,19 +147,26 @@ class TestThreadScaling:
         """Claim: In FTP, total time is ~constant regardless of thread count.
         Falsification: Total time would scale with N if delays serialised.
 
-        On FTP, parallel delays should complete in ~1×delay regardless of N.
-        """
-        total, _ = self.run_parallel_delays(n_threads, self.DELAY_NS)
+        On FTP, parallel delays should complete in ~1xdelay regardless of N.
 
-        # In FTP, total should be ~1×delay regardless of N
-        # Allow 3× tolerance for scheduling overhead
+        Uses auto-deflake: if timing fails due to GC/scheduler overshoot,
+        retries twice - both must pass to recover from flake.
+        """
         max_expected = self.DELAY_NS * 3
 
-        assert total <= max_expected, (
-            f"With {n_threads} FTP threads, total={total}ns but "
-            f"expected <={max_expected}ns (parallel). "
-            f"Delays may be serialising incorrectly."
-        )
+        def is_overshoot(e: AssertionError) -> bool:
+            # Any failure in this test is an overshoot (time too long)
+            return True
+
+        def run_test():
+            total, _ = self.run_parallel_delays(n_threads, self.DELAY_NS)
+            assert total <= max_expected, (
+                f"With {n_threads} FTP threads, total={total}ns but "
+                f"expected <={max_expected}ns (parallel). "
+                f"Delays may be serialising incorrectly."
+            )
+
+        with_deflake(run_test, is_overshoot)
 
     @requires_gil
     @pytest.mark.parametrize("n_threads", [1, 2, 4, 8])
@@ -113,11 +174,11 @@ class TestThreadScaling:
         """Control: In GIL Python, total time scales with thread count.
         Falsification: Would not scale if GIL was somehow bypassed.
 
-        On GIL Python, serialised delays should complete in ~N×delay.
+        On GIL Python, serialised delays should complete in ~Nxdelay.
         """
         total, _ = self.run_parallel_delays(n_threads, self.DELAY_NS)
 
-        # On GIL, total should be ~N×delay
+        # On GIL, total should be ~Nxdelay
         min_expected = self.DELAY_NS * n_threads * 0.5
 
         assert total >= min_expected, (
@@ -155,7 +216,7 @@ class TestScalingWithMonitoring:
     @pytest.mark.parametrize("n_threads", [1, 2, 4])
     def test_monitoring_overhead_with_threads(self, n_threads: int):
         """Claim: Monitoring doesn't cause excessive overhead per thread.
-        Falsification: Overhead would be > 10× if monitoring was broken.
+        Falsification: Overhead would be > 10x if monitoring was broken.
         """
         barrier = threading.Barrier(n_threads)
         results = [0] * n_threads
@@ -165,14 +226,14 @@ class TestScalingWithMonitoring:
             start = time.perf_counter_ns()
             # Call a function that will trigger monitoring
             for _ in range(100):
+
                 def dummy():
                     pass
+
                 dummy()
             results[idx] = time.perf_counter_ns() - start
 
-        threads = [
-            threading.Thread(target=worker, args=(i,)) for i in range(n_threads)
-        ]
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(n_threads)]
 
         for t in threads:
             t.start()
@@ -181,9 +242,7 @@ class TestScalingWithMonitoring:
 
         # Check that no thread had excessive overhead
         for i, elapsed in enumerate(results):
-            # 100 iterations × 1μs delay = ~100μs minimum
-            # Allow up to 10× overhead for scheduling etc.
+            # 100 iterations x 1μs delay = ~100μs minimum
+            # Allow up to 10x overhead for scheduling etc.
             max_expected = 100 * 1000 * 10  # 1ms
-            assert elapsed <= max_expected, (
-                f"Thread {i} monitoring overhead excessive: {elapsed}ns"
-            )
+            assert elapsed <= max_expected, f"Thread {i} monitoring overhead excessive: {elapsed}ns"

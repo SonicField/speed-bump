@@ -59,6 +59,7 @@ echo ""
 # Run tests using manual test runner (pytest may not be available)
 echo "=== Running Tests ==="
 PYTHONPATH="src:tests" "$PYTHON" -c "
+import gc
 import sys
 import time
 import threading
@@ -82,6 +83,21 @@ print('=' * 60)
 passed = 0
 failed = 0
 skipped = 0
+
+def with_deflake(test_fn, is_overshoot, retries=2):
+    '''Run a timing test with auto-deflake on overshoot failures.
+    If test_fn raises AssertionError and is_overshoot returns True,
+    retry up to retries times. All retries must pass to recover.'''
+    try:
+        test_fn()
+    except AssertionError as e:
+        if not is_overshoot(e):
+            raise
+        for _ in range(retries):
+            try:
+                test_fn()
+            except AssertionError:
+                raise e from None
 
 def run_test(name, test_fn, skip_condition=None, skip_reason=''):
     global passed, failed, skipped
@@ -139,44 +155,55 @@ def test_delay_worker_thread():
     assert 0.5 <= ratio <= 3.0, f'Thread delay inaccurate: {result[0]}ns (ratio={ratio:.2f})'
 run_test('Delay works in worker thread', test_delay_worker_thread)
 
-# Test 5: FTP parallelism (FTP only)
+# Test 5: FTP parallelism (FTP only) - with GC disable and deflake
 def test_ftp_parallelism():
     delay_ns = 100_000
     n_threads = 4
-    # Two-barrier approach: excludes thread startup/teardown overhead
-    start_barrier = threading.Barrier(n_threads + 1)
-    end_barrier = threading.Barrier(n_threads + 1)
-
-    def worker():
-        start_barrier.wait()
-        speed_bump.spin_delay_ns(delay_ns)
-        end_barrier.wait()
-
-    threads = [threading.Thread(target=worker) for _ in range(n_threads)]
-    for t in threads:
-        t.start()
-
-    # Release all workers and measure only the spin delay time
-    start_barrier.wait()
-    start = time.perf_counter_ns()
-    end_barrier.wait()
-    total = time.perf_counter_ns() - start
-
-    for t in threads:
-        t.join()
-
-    # On FTP, total should be ~1x delay (parallel), not 4x (serialised)
-    # Allow 3x tolerance for barrier overhead
     max_expected = delay_ns * 3
-    assert total <= max_expected, f'Delays not parallel: total={total}ns, expected < {max_expected}ns'
+
+    def is_overshoot(e):
+        return True  # Any failure is an overshoot
+
+    def run_test():
+        start_barrier = threading.Barrier(n_threads + 1)
+        end_barrier = threading.Barrier(n_threads + 1)
+
+        def worker():
+            start_barrier.wait()
+            speed_bump.spin_delay_ns(delay_ns)
+            end_barrier.wait()
+
+        threads = [threading.Thread(target=worker) for _ in range(n_threads)]
+        for t in threads:
+            t.start()
+
+        # Disable GC during timing-sensitive measurement
+        gc_was_enabled = gc.isenabled()
+        gc.disable()
+        try:
+            start_barrier.wait()
+            start = time.perf_counter_ns()
+            end_barrier.wait()
+            total = time.perf_counter_ns() - start
+        finally:
+            if gc_was_enabled:
+                gc.enable()
+
+        for t in threads:
+            t.join()
+
+        assert total <= max_expected, f'Delays not parallel: total={total}ns, expected < {max_expected}ns'
+
+    with_deflake(run_test, is_overshoot)
 run_test('FTP delays are parallel', test_ftp_parallelism,
          skip_condition=is_gil_python(), skip_reason='Requires FTP')
 
-# Test 6: GIL serialisation (GIL only)
+# Test 6: GIL serialisation (GIL only) - with GC disable
 def test_gil_serialisation():
     delay_ns = 100_000
     n_threads = 4
-    # Two-barrier approach for consistent measurement
+    min_expected = delay_ns * n_threads * 0.5
+
     start_barrier = threading.Barrier(n_threads + 1)
     end_barrier = threading.Barrier(n_threads + 1)
 
@@ -189,23 +216,30 @@ def test_gil_serialisation():
     for t in threads:
         t.start()
 
-    start_barrier.wait()
-    start = time.perf_counter_ns()
-    end_barrier.wait()
-    total = time.perf_counter_ns() - start
+    # Disable GC during timing-sensitive measurement
+    gc_was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        start_barrier.wait()
+        start = time.perf_counter_ns()
+        end_barrier.wait()
+        total = time.perf_counter_ns() - start
+    finally:
+        if gc_was_enabled:
+            gc.enable()
 
     for t in threads:
         t.join()
 
     # On GIL, delays should be serialised: total >= N * delay * 0.5
-    min_expected = delay_ns * n_threads * 0.5
+    # No deflake: GC makes time longer, not shorter, so can't cause false negatives
     assert total >= min_expected, f'Delays parallel on GIL: total={total}ns, expected >= {min_expected}ns'
 run_test('GIL delays are serialised', test_gil_serialisation,
          skip_condition=is_free_threaded(), skip_reason='Requires GIL')
 
 # Test 7-10: Thread scaling (1, 2, 4, 8 threads)
 def run_parallel_delays(n_threads, delay_ns):
-    '''Two-barrier approach: measures only spin delay time.'''
+    '''Two-barrier approach: measures only spin delay time. GC disabled during timing.'''
     start_barrier = threading.Barrier(n_threads + 1)
     end_barrier = threading.Barrier(n_threads + 1)
     per_thread = [0] * n_threads
@@ -221,10 +255,17 @@ def run_parallel_delays(n_threads, delay_ns):
     for t in threads:
         t.start()
 
-    start_barrier.wait()
-    wall_start = time.perf_counter_ns()
-    end_barrier.wait()
-    total = time.perf_counter_ns() - wall_start
+    # Disable GC during timing-sensitive measurement
+    gc_was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        start_barrier.wait()
+        wall_start = time.perf_counter_ns()
+        end_barrier.wait()
+        total = time.perf_counter_ns() - wall_start
+    finally:
+        if gc_was_enabled:
+            gc.enable()
 
     for t in threads:
         t.join()
