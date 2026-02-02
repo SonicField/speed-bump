@@ -37,7 +37,7 @@ echo ""
 
 # Build C extension if needed
 echo "=== Building C Extension ==="
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 # Get Python include and library paths
 PYTHON_INCLUDE=$("$PYTHON" -c "import sysconfig; print(sysconfig.get_path('include'))")
