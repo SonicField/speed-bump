@@ -185,31 +185,46 @@ PyDoc_STRVAR(module_doc,
 "- Clock calibration\n"
 "- Spin delay implementation\n"
 "- PEP 669 monitoring hooks (future)\n"
+"\n"
+"Thread Safety:\n"
+"- spin_delay_ns() is thread-safe and can run without the GIL\n"
+"- Calibration is performed once at module load time\n"
 );
 
-static struct PyModuleDef module_def = {
-    PyModuleDef_HEAD_INIT,
-    "_core",
-    module_doc,
-    -1,
-    module_methods,
-    NULL, NULL, NULL, NULL
-};
-
-PyMODINIT_FUNC PyInit__core(void) {
-    /* Run calibration before creating module */
+/* Multi-phase initialization for Python 3.12+ and FTP support */
+static int module_exec(PyObject *module) {
+    /* Run calibration at module initialization */
     calibrate_clock();
-
-    PyObject* module = PyModule_Create(&module_def);
-    if (module == NULL) {
-        return NULL;
-    }
 
     /* Add version constant */
     if (PyModule_AddStringConstant(module, "__version__", "0.1.0") < 0) {
-        Py_DECREF(module);
-        return NULL;
+        return -1;
     }
 
-    return module;
+    return 0;
+}
+
+static PyModuleDef_Slot module_slots[] = {
+    {Py_mod_exec, module_exec},
+#ifdef Py_mod_gil
+    /* Python 3.13+: Declare this module is safe without the GIL.
+     * The spin_delay_ns function uses only local variables and is thread-safe.
+     * The global calibration state is written once at init time and read-only thereafter.
+     */
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
+#endif
+    {0, NULL}
+};
+
+static struct PyModuleDef module_def = {
+    PyModuleDef_HEAD_INIT,
+    .m_name = "_core",
+    .m_doc = module_doc,
+    .m_size = 0,  /* No per-module state */
+    .m_methods = module_methods,
+    .m_slots = module_slots,
+};
+
+PyMODINIT_FUNC PyInit__core(void) {
+    return PyModuleDef_Init(&module_def);
 }

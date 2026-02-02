@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,48 @@ import pytest
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+
+
+# =============================================================================
+# Free-Threaded Python Detection
+# =============================================================================
+
+def is_free_threaded() -> bool:
+    """Return True if running on free-threaded Python (no GIL)."""
+    return hasattr(sys, '_is_gil_enabled') and not sys._is_gil_enabled()
+
+
+def is_gil_python() -> bool:
+    """Return True if running on GIL Python."""
+    return not hasattr(sys, '_is_gil_enabled') or sys._is_gil_enabled()
+
+
+# Skip markers for conditional tests
+requires_ftp = pytest.mark.skipif(
+    is_gil_python(),
+    reason="Requires free-threaded Python (--disable-gil)"
+)
+
+requires_gil = pytest.mark.skipif(
+    is_free_threaded(),
+    reason="Requires GIL Python"
+)
+
+requires_gil_detection = pytest.mark.skipif(
+    not hasattr(sys, '_is_gil_enabled'),
+    reason="Requires Python 3.13+ with sys._is_gil_enabled()"
+)
+
+
+@pytest.fixture
+def runtime_info() -> dict:
+    """Return information about the Python runtime."""
+    return {
+        "version": sys.version,
+        "has_gil_api": hasattr(sys, '_is_gil_enabled'),
+        "gil_enabled": sys._is_gil_enabled() if hasattr(sys, '_is_gil_enabled') else True,
+        "is_free_threaded": is_free_threaded(),
+    }
 
 
 @pytest.fixture

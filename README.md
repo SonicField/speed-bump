@@ -127,9 +127,21 @@ The spin delay holds the GIL while waiting. This accurately simulates slower Pyt
 
 ### Free-Threaded Python (PEP 703)
 
-Behaviour with free-threaded Python (nogil builds) is **unknown and untested**. The spin delay implementation assumes GIL semantics. If you're using Python 3.13+ with `--disable-gil`, results may not be meaningful.
+**Verified with Python 3.14 free-threaded build (2026-02-01).**
 
-*This is an open question requiring investigation.*
+Speed Bump works correctly with free-threaded Python (`--disable-gil` builds):
+
+- The C extension declares `Py_mod_gil = Py_MOD_GIL_NOT_USED`, so it runs without re-enabling the GIL
+- Each thread receives accurate per-thread delays
+- The spin_delay_ns function is thread-safe
+
+**Key Finding**: On FTP, parallel threads running spin delays exhibit high contention (likely cache thrashing on clock reads). Parallel execution takes longer than serialised execution would on GIL Python. This is actually beneficial for speed-bump's purpose (slowing things down), but means the "constant time for N threads" property does not hold.
+
+**Test Results** (Python 3.14.0 FTP build, LTO):
+- Runtime detection: PASS (correctly identifies FTP vs GIL)
+- Per-thread delay accuracy: PASS (each thread gets correct delay)
+- Parallel performance: N/A (contention causes longer-than-serialised times)
+- Cache thread safety: PASS
 
 ## Documentation
 
