@@ -17,16 +17,18 @@
 
 ### Immediate (This Session)
 - [x] Verify build and tests pass
-- [ ] Document known limitations
-- [ ] Establish NBS structure (this plan, progress log)
+- [x] Document known limitations
+- [x] Establish NBS structure (this plan, progress log)
 
 ### Next Session
-- [ ] Run `/nbs-investigation` on "Statistics collection" to determine requirements
-- [ ] Test behaviour with free-threaded Python (if available)
+- [x] Run `/nbs-investigation` on "Statistics collection" to determine requirements → **Deferred** (annotated in README)
+- [x] Test behaviour with free-threaded Python → **Complete** (see FTP progress log)
 
-### Future
+### Future (Deferred)
 - [ ] Consider alternative approaches for C extension coverage (eBPF - speculative)
 - [ ] Decide on statistics collection feature
+
+**Plan complete. Core objectives achieved. FTP verification complete. Future items are exploratory/deferred.**
 
 ---
 
@@ -38,11 +40,11 @@
 
 ---
 
-## Open Questions
+## Open Questions (Resolved)
 
-1. What should "Statistics collection" actually collect?
-2. Is there a path to slowing C extension code?
-3. How does spin delay behave without GIL?
+1. ~~What should "Statistics collection" actually collect?~~ **Deferred** - annotated in README with uncertainty note
+2. ~~Is there a path to slowing C extension code?~~ **No** - documented as fundamental limitation
+3. ~~How does spin delay behave without GIL?~~ **Parallel execution** - verified with FTP tests
 
 ---
 
