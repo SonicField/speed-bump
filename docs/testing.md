@@ -14,10 +14,10 @@ pytest tests/
 
 ```bash
 # Test with GIL Python
-./run_ftp_tests.sh /path/to/python3.14/bin/python3
+./tests/run_ftp_tests.sh /path/to/python3.14/bin/python3
 
 # Test with FTP Python
-./run_ftp_tests.sh /path/to/python3.14t/bin/python3
+./tests/run_ftp_tests.sh /path/to/python3.14t/bin/python3
 ```
 
 The standalone runner:

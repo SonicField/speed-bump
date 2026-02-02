@@ -169,6 +169,8 @@ pip install -e .[dev]
 pytest
 ```
 
+For C-level sanitiser tests (ThreadSanitizer, AddressSanitizer), see [docs/testing.md](docs/testing.md).
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 
 ## Licence
