@@ -36,6 +36,7 @@ from speed_bump._monitoring import (
     is_installed,
     uninstall,
 )
+from speed_bump import native
 
 __version__ = "0.1.0"
 __all__ = [
@@ -54,6 +55,8 @@ __all__ = [
     "is_installed",
     "load_config",
     "min_delay_ns",
+    # Native probing
+    "native",
     # Delay
     "spin_delay_ns",
     "uninstall",
