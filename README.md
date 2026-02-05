@@ -140,9 +140,9 @@ Speed Bump has fundamental constraints to be aware of:
 
 ### Only Interpreted Python
 
-Speed Bump can only slow down Python code that runs through the interpreter. C extensions, NumPy ufuncs, and other native code execute outside Python's monitoring system and cannot be intercepted.
+Speed Bump's Python monitoring can only slow down Python code that runs through the interpreter. C extensions, NumPy ufuncs, and other native code execute outside Python's monitoring system.
 
-**Implication**: If your bottleneck is inside a C extension (e.g., inside `numpy.dot`), Speed Bump cannot slow it down to measure sensitivity.
+**For native code**, use the `speed_bump.native` module (see [Native Code Probing](#native-code-probing) below), which uses kernel uprobes to inject delays into compiled binaries.
 
 ### GIL Holding
 
@@ -185,6 +185,67 @@ speed_bump.min_delay_ns       # Minimum achievable delay (2x overhead)
 speed_bump.spin_delay_ns(1000)  # Spin for 1µs
 ```
 
+## Native Code Probing
+
+The `speed_bump.native` module provides uprobe-based delays for native C functions, allowing you to measure sensitivity of compiled code (C extensions, CPython internals, system libraries).
+
+**Requirements:**
+- Linux with kernel uprobe support
+- The `speed-bump-native-kmod` kernel module loaded
+- Root privileges (or appropriate capabilities) for writing to sysfs
+
+### Basic Usage
+
+```python
+from speed_bump import native
+
+# Probe a CPython internal function for this process and its children
+with native.probe("/usr/bin/python3", "PyObject_GetAttr", delay_ns=1000):
+    run_benchmark()  # Only this process tree is affected
+```
+
+### API
+
+```python
+from speed_bump import native
+
+# Check if kernel module is available
+if native.is_available():
+    # Context manager for scoped probing
+    with native.probe(binary_path, symbol, delay_ns=1000, pid=None):
+        # pid defaults to current process (os.getpid())
+        # Probe is automatically removed on exit
+        pass
+
+    # Manual control
+    native.add_probe("/path/to/binary", "function_name", delay_ns=5000)
+    native.remove_probe("/path/to/binary", "function_name")
+```
+
+### How It Works
+
+The native module writes to `/sys/kernel/speed_bump/targets` to configure the kernel module:
+- Add probe: `+/path/to/binary:symbol delay_ns pid=N`
+- Remove probe: `-/path/to/binary:symbol`
+
+The kernel module uses uprobes to inject delays when the specified function is called. PID filtering ensures only the specified process and its descendants are affected.
+
+### Finding Symbols
+
+Use standard tools to find symbols in binaries:
+
+```bash
+# List symbols in Python
+nm -D /usr/bin/python3 | grep PyObject
+
+# List symbols in a shared library
+nm -D /usr/lib/libcuda.so | grep cudaLaunch
+```
+
+### Kernel Module
+
+The kernel module source is available at `speed-bump-native-kmod`. See that repository's README for building and loading instructions.
+
 ## Development
 
 ```bash
@@ -204,13 +265,15 @@ MIT. See [LICENSE](LICENSE).
 
 ## Status
 
-v0.1.0 - Initial release. Core functionality complete:
+v0.1.0 - Core functionality complete:
 - [x] Clock calibration
 - [x] Spin delay (C extension)
 - [x] Target pattern parsing (glob-based)
 - [x] PEP 669 monitoring integration
+- [x] Python 3.10+ support via sys.setprofile backend
 - [x] Timing window control (start delay, duration)
 - [x] Frequency control (every Nth call)
+- [x] Native code probing via kernel uprobes
 - [ ] Statistics collection
 
 <!--
