@@ -1,10 +1,13 @@
 # Speed Bump
 
-**Selective Python slowdown profiler for throughput analysis.**
+**Selective slowdown profiler for Python and native code.**
 
-Speed Bump introduces controlled, selective delays into Python code execution. By slowing specific modules/functions and measuring throughput impact, you can identify which Python code paths actually matter to overall system performance.
+Speed Bump introduces controlled, selective delays into code execution. By slowing specific modules/functions and measuring throughput impact, you can identify which code paths actually matter to overall system performance.
 
-This is particularly useful for AI/ML workloads where traditional profiling misses the subtle interactions between Python and GPU execution.
+- **Python code**: Uses PEP 669 (`sys.monitoring`) or `sys.setprofile` to intercept function calls
+- **Native code**: Uses kernel uprobes via the optional [speed-bump-native-kmod](https://github.com/SonicField/speed-bump-native-kmod) kernel module
+
+This is particularly useful for AI/ML workloads where traditional profiling misses the subtle interactions between Python, native extensions, and GPU execution.
 
 ## The Problem
 
@@ -242,9 +245,16 @@ nm -D /usr/bin/python3 | grep PyObject
 nm -D /usr/lib/libcuda.so | grep cudaLaunch
 ```
 
-### Kernel Module
+### Kernel Module Installation
 
-The kernel module source is available at `speed-bump-native-kmod`. See that repository's README for building and loading instructions.
+The kernel module source is available at [speed-bump-native-kmod](https://github.com/SonicField/speed-bump-native-kmod).
+
+**To install:**
+1. Clone the repository: `git clone https://github.com/SonicField/speed-bump-native-kmod.git`
+2. Follow the README for building and loading (or use the QEMU test environment)
+3. Once loaded, `/sys/kernel/speed_bump/targets` becomes available
+
+**Without the kernel module**, speed-bump works normally for Python code profiling - only the `speed_bump.native` module will report `is_available() == False`.
 
 ## Development
 
